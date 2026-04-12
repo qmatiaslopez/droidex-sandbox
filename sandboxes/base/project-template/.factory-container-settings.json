@@ -1,0 +1,20 @@
+{
+  "customModels": [],
+  "sessionDefaultSettings": {
+    "model": "",
+    "reasoningEffort": "none",
+    "interactionMode": "auto",
+    "autonomyLevel": "medium",
+    "autonomyMode": "auto-medium"
+  },
+  "missionModelSettings": {
+    "workerModel": "",
+    "workerReasoningEffort": "none",
+    "validationWorkerModel": "",
+    "validationWorkerReasoningEffort": "none",
+    "skipScrutiny": false,
+    "skipUserTesting": false
+  },
+  "missionOrchestratorModel": "",
+  "missionOrchestratorReasoningEffort": "none"
+}

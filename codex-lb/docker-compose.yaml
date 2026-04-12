@@ -1,0 +1,24 @@
+services:
+  codex-lb:
+    image: ghcr.io/soju06/codex-lb:latest
+    container_name: ${CODEX_LB_CONTAINER_NAME:-codex-lb}
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:${CODEX_LB_PORT:-2455}:2455"
+    volumes:
+      - codex-lb-data:/var/lib/codex-lb
+    networks:
+      shared:
+        aliases:
+          - ${CODEX_LB_CONTAINER_NAME:-codex-lb}
+          - codex-lb
+networks:
+  shared:
+    external: true
+    name: ${CODEX_LB_NETWORK:-codex-lb-shared}
+volumes:
+  codex-lb-data:
+    external: true
+    name: ${CODEX_LB_VOLUME:-codex-lb-data}

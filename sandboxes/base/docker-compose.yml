@@ -1,0 +1,42 @@
+services:
+  droid:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USER_UID: ${UID}
+        USER_GID: ${GID}
+    image: droidex-sandbox:bookworm
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    init: true
+    command: bash
+    environment:
+      TERM: xterm-256color
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./repo:/workspace
+      - ./.factory:/workspace/.factory:ro
+      - ./.factory-container-settings.json:/factory-config/settings.json:ro
+      - factory_home:/home/dev/.factory
+      - factory_cache:/home/dev/.cache
+    tmpfs:
+      - /tmp
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 256
+    networks:
+      default:
+      codex_bridge:
+
+volumes:
+  factory_home:
+  factory_cache:
+
+networks:
+  default:
+  codex_bridge:
+    external: true
+    name: codex-lb-shared

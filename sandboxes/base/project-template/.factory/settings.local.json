@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Execute",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$FACTORY_PROJECT_DIR/.factory/hooks/deny-host-ops.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
