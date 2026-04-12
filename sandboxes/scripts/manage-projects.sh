@@ -6,12 +6,8 @@ SANDBOX_HOME="${SANDBOX_HOME:-$STACK_ROOT/sandboxes}"
 PROJECTS_DIR="${SANDBOX_PROJECTS_DIR:-$SANDBOX_HOME/projects}"
 INIT_SCRIPT="$SANDBOX_HOME/base/scripts/init-project.sh"
 RESOLVE_MODELS_SCRIPT="$SANDBOX_HOME/scripts/resolve-models.sh"
-REFRESH_SCRIPT="$SANDBOX_HOME/scripts/refresh-models.sh"
-VALIDATE_SCRIPT="$SANDBOX_HOME/scripts/validate-sandbox.sh"
 ENTER_SCRIPT="$SANDBOX_HOME/base/scripts/enter-sandbox.sh"
-DEPLOY_COMPAT_SCRIPT="$SANDBOX_HOME/scripts/deploy-stack.sh"
 CODEX_COMPOSE_FILE="${CODEX_COMPOSE_FILE:-$STACK_ROOT/codex-lb/docker-compose.yaml}"
-CODEX_RUNTIME_FALLBACK="${CODEX_RUNTIME_FALLBACK:-}"
 
 CSI=$'\033['
 RESET="${CSI}0m"
@@ -48,7 +44,7 @@ print_header() {
   print_line
   paint "$BOLD$CYAN" "Droidex Sandbox Control Center"
   print_line
-  paint "$DIM" "Unified menu for Droid sandboxes and codex-lb"
+  paint "$DIM" "Daily menu for sandbox creation and access"
   print_line
   print_line "$(paint "$DIM" "$(printf '%.0s─' {1..72})")"
   print_codex_summary
@@ -151,15 +147,7 @@ project_status_label() {
 
 print_codex_summary() {
   local summary="codex-lb: unknown"
-  local compose_file=""
-
   if [[ -f "$CODEX_COMPOSE_FILE" ]]; then
-    compose_file="$CODEX_COMPOSE_FILE"
-  elif [[ -n "$CODEX_RUNTIME_FALLBACK" && -f "$CODEX_RUNTIME_FALLBACK" ]]; then
-    compose_file="$CODEX_RUNTIME_FALLBACK"
-  fi
-
-  if [[ -n "$compose_file" ]]; then
     local output
     output="$(docker ps --filter label=com.docker.compose.service=codex-lb --filter status=running --format {{.Names}} 2>/dev/null | tr -d "\r" || true)"
     if [[ -n "$output" ]]; then
@@ -351,66 +339,6 @@ enter_project() {
   SANDBOX_PROJECTS_DIR="$PROJECTS_DIR" "$ENTER_SCRIPT" "$project"
 }
 
-show_project_status() {
-  local project="$1"
-  local dir
-  dir="$(project_dir "$project")"
-
-  print_header
-  paint "$BOLD$BLUE" "Project details"
-  print_line
-  print_line "Name: $project"
-  print_line "Path: $dir"
-  [[ -d "$dir/repo" ]] && print_line "Repo dir: present" || print_line "Repo dir: missing"
-  [[ -d "$dir/repo/.git" ]] && print_line "Git repo: yes" || print_line "Git repo: no"
-  [[ -f "$dir/.env.local" ]] && print_line "Secrets: present" || print_line "Secrets: missing"
-  [[ -f "$dir/.factory-container-settings.json" ]] && print_line "Droid settings: present" || print_line "Droid settings: missing"
-
-  local running
-  running="$(project_running_services "$dir")"
-  if [[ -n "$running" ]]; then
-    print_line "Running services:"
-    while IFS= read -r line; do
-      [[ -n "$line" ]] && print_line "  - $line"
-    done <<< "$running"
-  else
-    print_line "Running services: none"
-  fi
-}
-
-rebuild_project() {
-  local project="$1"
-  local dir
-  dir="$(project_dir "$project")"
-  (
-    cd "$dir"
-    docker compose build
-  )
-}
-
-refresh_project_models() {
-  local project="$1"
-  SANDBOX_HOME="$SANDBOX_HOME" SANDBOX_PROJECTS_DIR="$PROJECTS_DIR" "$REFRESH_SCRIPT" "$project"
-}
-
-validate_project() {
-  local project="$1"
-  local dir
-  dir="$(project_dir "$project")"
-  local running
-  running="$(project_running_services "$dir")"
-
-  if [[ -z "$running" ]]; then
-    if prompt_yes_no "Project is not running. Build and start it before validation?" "y"; then
-      ensure_project_started "$project"
-    else
-      return 0
-    fi
-  fi
-
-  "$VALIDATE_SCRIPT" "$dir"
-}
-
 delete_project() {
   local project="$1"
   local dir
@@ -450,12 +378,8 @@ show_menu() {
   print_line "  1) Create project"
   print_line "  2) Enter Droid"
   print_line "  3) Open sandbox shell"
-  print_line "  4) Project status"
-  print_line "  5) Rebuild project"
-  print_line "  6) Refresh models"
-  print_line "  7) Validate connectivity"
-  print_line "  8) Delete project"
-  print_line "  9) Refresh screen"
+  print_line "  4) Delete project"
+  print_line "  5) Refresh screen"
   print_line "  0) Exit"
   print_line
 }
@@ -470,14 +394,12 @@ run_action_with_project() {
 
 require_script "$INIT_SCRIPT"
 require_script "$RESOLVE_MODELS_SCRIPT"
-require_script "$REFRESH_SCRIPT"
-require_script "$VALIDATE_SCRIPT"
 require_script "$ENTER_SCRIPT"
 mkdir -p "$PROJECTS_DIR"
 
 while true; do
   show_menu
-  read -r -p "Choose an option [0-9]: " option || exit 0
+  read -r -p "Choose an option [0-5]: " option || exit 0
 
   case "$option" in
     1)
@@ -490,21 +412,9 @@ while true; do
       run_action_with_project "Choose a project shell:" open_project_shell
       ;;
     4)
-      run_action_with_project "Choose a project to inspect:" show_project_status
-      ;;
-    5)
-      run_action_with_project "Choose a project to rebuild:" rebuild_project
-      ;;
-    6)
-      run_action_with_project "Choose a project to refresh models:" refresh_project_models
-      ;;
-    7)
-      run_action_with_project "Choose a project to validate:" validate_project
-      ;;
-    8)
       run_action_with_project "Choose a project to delete:" delete_project
       ;;
-    9)
+    5)
       ;;
     0)
       print_line "Bye"

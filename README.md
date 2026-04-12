@@ -7,7 +7,7 @@ Minimal stack to run `codex-lb` and isolated Droid sandboxes from one repository
 - `manage.sh`: main operator entrypoint
 - `codex-lb/`: Docker Compose stack for the shared proxy
 - `sandboxes/base/`: sandbox image, compose template, and project scaffolding
-- `sandboxes/scripts/`: project lifecycle, model refresh, and connectivity checks
+- `sandboxes/scripts/`: project lifecycle plus advanced maintenance commands
 - `docs/`: setup, operations, publishing, and security notes
 
 ## Requirements
@@ -42,7 +42,7 @@ cd ..
 ./manage.sh
 ```
 
-5. Create a sandbox project from the menu and validate connectivity.
+5. Create a sandbox project from the menu.
 
 ## Runtime model
 
@@ -58,8 +58,14 @@ cd ..
 - Clone or initialize the repo inside `sandboxes/projects/<name>/repo/`
 - Build and start the sandbox when prompted
 - Enter Droid or open a shell
-- Refresh models after changing the upstream API key or available models
-- Run connectivity validation when changing `codex-lb` or Docker networking
+
+## Advanced operations
+
+Use scripts directly for technical maintenance tasks that are not part of the daily menu:
+
+- Refresh models: `./sandboxes/scripts/refresh-models.sh <project>`
+- Validate sandbox connectivity: `./sandboxes/scripts/validate-sandbox.sh sandboxes/projects/<project>`
+- Rebuild a sandbox image: `docker compose build` inside `sandboxes/projects/<project>/`
 
 ## Files that must stay out of Git
 

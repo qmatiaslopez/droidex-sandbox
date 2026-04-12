@@ -30,21 +30,44 @@ The menu is the intended operator interface for day-to-day use.
 - opens an interactive shell inside the running sandbox
 - useful for dependency installation, Git setup, and debugging
 
+### Delete project
+
+- removes the selected sandbox after explicit confirmation
+- stops compose resources and removes local project data
+
+## Advanced operations
+
+These are still supported, but they are no longer shown in the interactive menu.
+
 ### Refresh models
 
 - rereads `OPENAI_API_KEY` from `.env.local`
 - calls `codex-lb` model discovery
 - rewrites `.factory-container-settings.json`
 
+```bash
+./sandboxes/scripts/refresh-models.sh <project>
+```
+
 ### Validate connectivity
 
-- checks that the sandbox can reach `http://codex-lb:2455/v1`
-- should return success after proxy or network changes
+- checks that the sandbox can call `http://codex-lb:2455/v1/models`
+- reuses the project's `OPENAI_API_KEY` from `.env.local`
+- use after proxy or network changes
+
+```bash
+./sandboxes/scripts/validate-sandbox.sh sandboxes/projects/<project>
+```
 
 ### Rebuild project
 
 - rebuilds the sandbox image for the selected project
 - use after Dockerfile changes or CLI bootstrap changes
+
+```bash
+cd sandboxes/projects/<project>
+docker compose build
+```
 
 ## Runtime conventions
 

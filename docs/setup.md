@@ -30,13 +30,13 @@ cd codex-lb
 docker compose --env-file .env up -d
 ```
 
-Validate from the host:
+Optional host smoke check:
 
 ```bash
-./scripts/validate-host.sh
+curl -i http://127.0.0.1:2455/v1
 ```
 
-The expected result is HTTP `404` on `/v1`, which confirms the service is reachable.
+The expected result is HTTP `404` on `/v1`, which confirms the service is reachable on localhost.
 
 ## 2. Create the first sandbox
 
@@ -69,8 +69,6 @@ From the menu you can:
 - build and start the sandbox
 - enter Droid
 - open a shell
-- refresh models
-- validate connectivity
 
 Direct connectivity check:
 
@@ -78,4 +76,4 @@ Direct connectivity check:
 ./sandboxes/scripts/validate-sandbox.sh sandboxes/projects/<name>
 ```
 
-Expected result: the sandbox reaches `http://codex-lb:2455/v1` successfully.
+Expected result: the sandbox reaches `http://codex-lb:2455/v1/models` with the project API key and receives a non-empty model list.
