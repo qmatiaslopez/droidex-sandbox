@@ -5,6 +5,7 @@
 These files contain runtime secrets or generated credentials and must stay local:
 
 - `codex-lb/.env`
+- `sandboxes/.env`
 - `sandboxes/projects/<name>/.env.local`
 - `sandboxes/projects/<name>/.factory-container-settings.json`
 

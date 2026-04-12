@@ -8,6 +8,7 @@ INIT_SCRIPT="$SANDBOX_HOME/base/scripts/init-project.sh"
 RESOLVE_MODELS_SCRIPT="$SANDBOX_HOME/scripts/resolve-models.sh"
 ENTER_SCRIPT="$SANDBOX_HOME/base/scripts/enter-sandbox.sh"
 CODEX_COMPOSE_FILE="${CODEX_COMPOSE_FILE:-$STACK_ROOT/codex-lb/docker-compose.yaml}"
+SANDBOX_ENV_FILE="${SANDBOX_ENV_FILE:-$SANDBOX_HOME/.env}"
 
 CSI=$'\033['
 RESET="${CSI}0m"
@@ -105,6 +106,149 @@ prompt_yes_no() {
   done
 }
 
+read_env_value() {
+  local env_file="$1"
+  local variable_name="$2"
+
+  [[ -f "$env_file" ]] || return 1
+
+  python3 - "$env_file" "$variable_name" <<'PY'
+import sys
+from pathlib import Path
+
+env_path = Path(sys.argv[1])
+variable_name = sys.argv[2]
+
+for raw_line in env_path.read_text().splitlines():
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        continue
+    if line.startswith("export "):
+        line = line[7:].lstrip()
+    if "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    if key.strip() != variable_name:
+        continue
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1]
+    print(value)
+    break
+else:
+    raise SystemExit(1)
+PY
+}
+
+write_env_value() {
+  local env_file="$1"
+  local variable_name="$2"
+  local variable_value="$3"
+
+  python3 - "$env_file" "$variable_name" "$variable_value" <<'PY'
+import sys
+from pathlib import Path
+
+env_path = Path(sys.argv[1])
+variable_name = sys.argv[2]
+variable_value = sys.argv[3]
+
+lines = env_path.read_text().splitlines() if env_path.exists() else []
+updated = False
+output = []
+
+for line in lines:
+    stripped = line.strip()
+    candidate = stripped
+    if stripped.startswith("export "):
+        candidate = stripped[7:].lstrip()
+    if "=" in candidate:
+        key = candidate.split("=", 1)[0].strip()
+        if key == variable_name:
+            output.append(f"{variable_name}={variable_value}")
+            updated = True
+            continue
+    output.append(line)
+
+if not updated:
+    output.append(f"{variable_name}={variable_value}")
+
+env_path.write_text("\n".join(output) + "\n")
+PY
+}
+
+project_has_api_key() {
+  local project="$1"
+  local dir
+  dir="$(project_dir "$project")"
+  local api_key=""
+
+  if api_key="$(read_env_value "$dir/.env.local" "OPENAI_API_KEY" 2>/dev/null)"; then
+    [[ -n "$api_key" ]] && return 0
+  fi
+
+  if api_key="$(read_env_value "$dir/.env" "OPENAI_API_KEY" 2>/dev/null)"; then
+    [[ -n "$api_key" ]] && return 0
+  fi
+
+  if api_key="$(read_env_value "$SANDBOX_ENV_FILE" "OPENAI_API_KEY" 2>/dev/null)"; then
+    [[ -n "$api_key" ]] && return 0
+  fi
+
+  return 1
+}
+
+resolve_project_api_key() {
+  local project_env_file="$1"
+  local project_local_env_file="$2"
+  local api_key=""
+
+  if api_key="$(read_env_value "$project_local_env_file" "OPENAI_API_KEY" 2>/dev/null)"; then
+    if [[ -n "$api_key" ]]; then
+      print_line "Using sandbox API key override from $project_local_env_file" >&2
+      printf '%s\n' "$api_key"
+      return 0
+    fi
+  fi
+
+  if api_key="$(read_env_value "$project_env_file" "OPENAI_API_KEY" 2>/dev/null)"; then
+    if [[ -n "$api_key" ]]; then
+      if prompt_yes_no "Use default codex-lb API key from $project_env_file?" "y"; then
+        printf '%s\n' "$api_key"
+        return 0
+      fi
+    fi
+  fi
+
+  if api_key="$(read_env_value "$SANDBOX_ENV_FILE" "OPENAI_API_KEY" 2>/dev/null)"; then
+    if [[ -n "$api_key" ]]; then
+      if prompt_yes_no "Use default codex-lb API key from $SANDBOX_ENV_FILE?" "y"; then
+        printf '%s\n' "$api_key"
+        return 0
+      fi
+    fi
+  fi
+
+  read -r -s -p "codex-lb API key for sandbox access: " api_key
+  echo
+  if [[ -z "$api_key" ]]; then
+    echo "codex-lb API key cannot be empty" >&2
+    return 1
+  fi
+
+  if [[ -n "$(read_env_value "$project_env_file" "OPENAI_API_KEY" 2>/dev/null || true)" ]]; then
+    write_env_value "$project_local_env_file" "OPENAI_API_KEY" "$api_key"
+    chmod 600 "$project_local_env_file"
+    print_line "Saved sandbox API key override to $project_local_env_file" >&2
+  else
+    write_env_value "$project_local_env_file" "OPENAI_API_KEY" "$api_key"
+    chmod 600 "$project_local_env_file"
+    print_line "Saved project-specific sandbox API key to $project_local_env_file" >&2
+  fi
+
+  printf '%s\n' "$api_key"
+}
+
 project_names() {
   if [[ ! -d "$PROJECTS_DIR" ]]; then
     return 0
@@ -173,7 +317,7 @@ print_project_dashboard() {
   for project in "${projects[@]}"; do
     dir="$(project_dir "$project")"
     [[ -d "$dir/repo/.git" ]] && repo_state="git" || repo_state="repo"
-    [[ -f "$dir/.env.local" ]] && secrets_state="secret" || secrets_state="no-secret"
+    project_has_api_key "$project" && secrets_state="secret" || secrets_state="no-secret"
     [[ -f "$dir/.factory-container-settings.json" ]] && model_state="models" || model_state="no-models"
     running_state="$(project_status_label "$project")"
     print_line "  $(paint "$BOLD" "$project")  [$running_state]  $(paint "$DIM" "$repo_state | $secrets_state | $model_state")"
@@ -263,25 +407,18 @@ create_project_flow() {
     return 1
   fi
 
-  local openai_api_key
-  read -r -s -p "OPENAI_API_KEY: " openai_api_key
-  echo
-  if [[ -z "$openai_api_key" ]]; then
-    echo "OPENAI_API_KEY cannot be empty" >&2
-    return 1
-  fi
-
   export SANDBOX_HOME
   "$INIT_SCRIPT" "$project_name"
 
   local repo_dir="$project_dir/repo"
+  local env_file="$project_dir/.env"
   local secrets_file="$project_dir/.env.local"
   local settings_output="$project_dir/.factory-container-settings.json"
-
-  cat > "$secrets_file" <<EOF_KEY
-OPENAI_API_KEY=$openai_api_key
-EOF_KEY
-  chmod 600 "$secrets_file"
+  local openai_api_key
+  openai_api_key="$(resolve_project_api_key "$env_file" "$secrets_file")" || {
+    rm -rf "$project_dir"
+    return 1
+  }
 
   "$RESOLVE_MODELS_SCRIPT" "$openai_api_key" > "$settings_output"
   setup_repository "$repo_dir"

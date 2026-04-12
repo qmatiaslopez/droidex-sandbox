@@ -16,7 +16,7 @@ Minimal stack to run `codex-lb` and isolated Droid sandboxes from one repository
 - Docker available for the runtime user
 - `bash`, `curl`, `git`, `jq`, `python3`
 - Access to the Droid CLI
-- An OpenAI-compatible API key that `codex-lb` can use upstream
+- A default sandbox API key configured in `sandboxes/.env`, or a project-specific override
 
 ## Quick start
 
@@ -44,6 +44,9 @@ cd ..
 
 5. Create a sandbox project from the menu.
 
+Copy `sandboxes/.env.example` to `sandboxes/.env` and set `OPENAI_API_KEY` there to define the default key for all projects.
+The menu offers that shared key first with `Y` as the default answer. If you choose another key, it is stored only for that project in `.env.local`.
+
 ## Runtime model
 
 - `codex-lb` is exposed on `127.0.0.1:2455` on the host.
@@ -70,8 +73,9 @@ Use scripts directly for technical maintenance tasks that are not part of the da
 ## Files that must stay out of Git
 
 - `codex-lb/.env`
+- `sandboxes/.env`
 - `sandboxes/projects/*`
-- `.env.local` files with API keys
+- project `.env.local` files with API keys
 - generated `.factory-container-settings.json` files
 - local caches and runtime artifacts
 

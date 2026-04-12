@@ -5,7 +5,7 @@
 - Linux host with Docker available for the runtime user
 - `bash`, `curl`, `git`, `jq`, `python3`
 - Network access for the Droid CLI installation inside sandbox images
-- An upstream API key for model discovery and proxy requests
+- a valid sandbox API key for `codex-lb`
 
 ## 1. Configure `codex-lb`
 
@@ -40,6 +40,14 @@ The expected result is HTTP `404` on `/v1`, which confirms the service is reacha
 
 ## 2. Create the first sandbox
 
+Create the shared sandbox defaults file:
+
+```bash
+cp sandboxes/.env.example sandboxes/.env
+```
+
+Set `OPENAI_API_KEY` in `sandboxes/.env` to the default key you want all projects to use unless overridden.
+
 Return to the repo root and open the menu:
 
 ```bash
@@ -50,15 +58,19 @@ cd ..
 Choose `Create project` and provide:
 
 - sandbox name
-- upstream `OPENAI_API_KEY`
+- choose whether to use the default `OPENAI_API_KEY` from `sandboxes/.env`
+- if needed, enter another `codex-lb` API key to store only for that project
 - optional repository URL to clone
+
+If `sandboxes/.env` has a default key, the menu offers to reuse it and defaults that answer to `Y`.
+If you choose another key, it is written to `sandboxes/projects/<name>/.env.local` as a project-specific override.
 
 The generator creates:
 
 - `sandboxes/projects/<name>/Dockerfile`
 - `sandboxes/projects/<name>/docker-compose.yml`
 - `sandboxes/projects/<name>/.env`
-- `sandboxes/projects/<name>/.env.local`
+- `sandboxes/projects/<name>/.env.local` when needed for an override
 - `sandboxes/projects/<name>/.factory-container-settings.json`
 - `sandboxes/projects/<name>/repo/`
 

@@ -46,6 +46,7 @@ Review `git status` before committing. Do not include local runtime files.
 ## Files that must never be pushed
 
 - `codex-lb/.env`
+- `sandboxes/.env`
 - `sandboxes/projects/**/.env.local`
 - `sandboxes/projects/**/.factory-container-settings.json`
 - cloned repos under `sandboxes/projects/**/repo/`

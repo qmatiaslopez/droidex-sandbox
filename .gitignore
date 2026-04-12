@@ -18,6 +18,7 @@ node_modules/
 repo/
 sandboxes/projects/*
 !sandboxes/projects/.gitkeep
+sandboxes/.env
 sandboxes/projects/**/.env.local
 sandboxes/projects/**/.factory-container-settings.json
 sandboxes/projects/**/repo/
