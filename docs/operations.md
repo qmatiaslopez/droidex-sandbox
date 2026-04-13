@@ -15,6 +15,7 @@ The menu is the intended operator interface for day-to-day use.
 ### Create project
 
 - scaffolds a new sandbox under `sandboxes/projects/<name>/`
+- asks for the sandbox profile: `base`, `python`, or `npm`
 - offers the shared default API key from `sandboxes/.env`
 - writes `.env.local` only when you choose a project override
 - discovers models through `codex-lb`
@@ -23,8 +24,9 @@ The menu is the intended operator interface for day-to-day use.
 ### Enter Droid
 
 - starts the sandbox if needed
-- opens the Droid CLI inside the `droid` container
+- opens or resumes a persistent Droid session inside the `droid` container
 - uses `/factory-config/settings.json` generated for that project
+- runs Droid inside `tmux`, so it survives terminal disconnects
 
 ### Open sandbox shell
 
@@ -69,6 +71,22 @@ These are still supported, but they are no longer shown in the interactive menu.
 cd sandboxes/projects/<project>
 docker compose build
 ```
+
+## Runtime profiles
+
+New sandboxes can be created with either:
+
+- `base`: minimal sandbox without Python or Node.js preinstalled
+- `python`: for Python-based repos and tooling
+- `npm`: for Node.js and npm-based repos and tooling
+
+Existing projects keep their current Dockerfile until you change it manually.
+
+## Runtime privilege policy
+
+Sandbox containers run as the non-root user `dev` and do not include `sudo`.
+
+Keep using the Dockerfile for stable base tooling and install system dependencies at build time.
 
 ## Runtime conventions
 

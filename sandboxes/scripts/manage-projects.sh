@@ -40,6 +40,16 @@ print_line() {
   printf '%s\n' "$*"
 }
 
+print_section() {
+  print_line >&2
+  paint "$BOLD$BLUE" "$1" >&2
+  print_line >&2
+  if [[ -n "${2:-}" ]]; then
+    paint "$DIM" "$2" >&2
+    print_line >&2
+  fi
+}
+
 print_header() {
   clear 2>/dev/null || true
   print_line
@@ -68,7 +78,12 @@ require_script() {
 prompt_default() {
   local prompt="$1"
   local default_value="$2"
+  local help_text="${3:-}"
   local value
+  if [[ -n "$help_text" ]]; then
+    paint "$DIM" "$help_text" >&2
+    print_line >&2
+  fi
   read -r -p "$prompt [$default_value]: " value
   if [[ -z "$value" ]]; then
     value="$default_value"
@@ -104,6 +119,44 @@ prompt_yes_no() {
         ;;
     esac
   done
+}
+
+prompt_numbered_choice() {
+  local prompt="$1"
+  local default_choice="$2"
+  shift 2
+  local options=("$@")
+  local max_choice="${#options[@]}"
+  local answer index label
+
+  while true; do
+    read -r -p "$prompt [1-$max_choice, default $default_choice]: " answer
+    answer="${answer:-$default_choice}"
+
+    if [[ "$answer" =~ ^[0-9]+$ ]] && (( answer >= 1 && answer <= max_choice )); then
+      printf '%s\n' "${options[answer-1]}"
+      return 0
+    fi
+
+    for index in "${!options[@]}"; do
+      label="${options[index]}"
+      if [[ "$answer" == "$label" ]]; then
+        printf '%s\n' "$label"
+        return 0
+      fi
+    done
+
+    echo "Invalid selection. Choose a number from 1 to $max_choice."
+  done
+}
+
+prompt_profile() {
+  print_section "Sandbox profile" "Choose the runtime that new containers should include by default."
+  print_line "  1) base    Minimal sandbox with Droid and common CLI tools only" >&2
+  print_line "  2) python  Includes Python and pip for Python projects" >&2
+  print_line "  3) npm     Includes Node.js and npm for JavaScript/TypeScript projects" >&2
+  print_line >&2
+  prompt_numbered_choice "Select the sandbox profile: 1=base, 2=python, 3=npm" "1" "base" "python" "npm"
 }
 
 read_env_value() {
@@ -177,6 +230,25 @@ env_path.write_text("\n".join(output) + "\n")
 PY
 }
 
+sanitize_env_value() {
+  local raw_value="$1"
+
+  python3 - "$raw_value" <<'PY'
+import re
+import sys
+
+value = sys.argv[1]
+value = re.sub(r"[\x00-\x1f\x7f]", "", value)
+value = value.strip()
+
+match = re.search(r"(sk-[A-Za-z0-9_-]+)", value)
+if match:
+    value = match.group(1)
+
+print(value.strip())
+PY
+}
+
 project_has_api_key() {
   local project="$1"
   local dir
@@ -204,16 +276,18 @@ resolve_project_api_key() {
   local api_key=""
 
   if api_key="$(read_env_value "$project_local_env_file" "OPENAI_API_KEY" 2>/dev/null)"; then
+    api_key="$(sanitize_env_value "$api_key")"
     if [[ -n "$api_key" ]]; then
-      print_line "Using sandbox API key override from $project_local_env_file" >&2
+      print_line "Using the project-specific codex-lb API key stored in $project_local_env_file" >&2
       printf '%s\n' "$api_key"
       return 0
     fi
   fi
 
   if api_key="$(read_env_value "$project_env_file" "OPENAI_API_KEY" 2>/dev/null)"; then
+    api_key="$(sanitize_env_value "$api_key")"
     if [[ -n "$api_key" ]]; then
-      if prompt_yes_no "Use default codex-lb API key from $project_env_file?" "y"; then
+      if prompt_yes_no "Use the default codex-lb API key defined in $project_env_file for this sandbox?" "y"; then
         printf '%s\n' "$api_key"
         return 0
       fi
@@ -221,29 +295,31 @@ resolve_project_api_key() {
   fi
 
   if api_key="$(read_env_value "$SANDBOX_ENV_FILE" "OPENAI_API_KEY" 2>/dev/null)"; then
+    api_key="$(sanitize_env_value "$api_key")"
     if [[ -n "$api_key" ]]; then
-      if prompt_yes_no "Use default codex-lb API key from $SANDBOX_ENV_FILE?" "y"; then
+      if prompt_yes_no "Use the shared default codex-lb API key from $SANDBOX_ENV_FILE for this sandbox?" "y"; then
         printf '%s\n' "$api_key"
         return 0
       fi
     fi
   fi
 
-  read -r -s -p "codex-lb API key for sandbox access: " api_key
-  echo
+  read -r -s -p "Enter the codex-lb API key this sandbox should use: " api_key
+  echo >&2
+  api_key="$(sanitize_env_value "$api_key")"
   if [[ -z "$api_key" ]]; then
-    echo "codex-lb API key cannot be empty" >&2
+    echo "The codex-lb API key cannot be empty." >&2
     return 1
   fi
 
   if [[ -n "$(read_env_value "$project_env_file" "OPENAI_API_KEY" 2>/dev/null || true)" ]]; then
     write_env_value "$project_local_env_file" "OPENAI_API_KEY" "$api_key"
     chmod 600 "$project_local_env_file"
-    print_line "Saved sandbox API key override to $project_local_env_file" >&2
+    print_line "Saved the sandbox-specific codex-lb API key override to $project_local_env_file" >&2
   else
     write_env_value "$project_local_env_file" "OPENAI_API_KEY" "$api_key"
     chmod 600 "$project_local_env_file"
-    print_line "Saved project-specific sandbox API key to $project_local_env_file" >&2
+    print_line "Saved the sandbox-specific codex-lb API key to $project_local_env_file" >&2
   fi
 
   printf '%s\n' "$api_key"
@@ -263,6 +339,34 @@ project_names() {
 
 project_dir() {
   printf '%s/%s\n' "$PROJECTS_DIR" "$1"
+}
+
+project_profile_label() {
+  local project="$1"
+  local dir dockerfile first_line
+  dir="$(project_dir "$project")"
+  dockerfile="$dir/Dockerfile"
+
+  if [[ ! -f "$dockerfile" ]]; then
+    printf 'unknown\n'
+    return
+  fi
+
+  first_line="$(head -n 1 "$dockerfile" 2>/dev/null || true)"
+  case "$first_line" in
+    "FROM python:"*)
+      printf 'python\n'
+      ;;
+    "FROM node:"*)
+      printf 'npm\n'
+      ;;
+    "FROM debian:"*)
+      printf 'base\n'
+      ;;
+    *)
+      printf 'custom\n'
+      ;;
+  esac
 }
 
 project_running_services() {
@@ -313,19 +417,21 @@ print_project_dashboard() {
   fi
 
   print_line "Projects:"
-  local project dir repo_state secrets_state model_state running_state
+  local project dir repo_state secrets_state model_state running_state profile_label
   for project in "${projects[@]}"; do
     dir="$(project_dir "$project")"
-    [[ -d "$dir/repo/.git" ]] && repo_state="git" || repo_state="repo"
-    project_has_api_key "$project" && secrets_state="secret" || secrets_state="no-secret"
-    [[ -f "$dir/.factory-container-settings.json" ]] && model_state="models" || model_state="no-models"
+    [[ -d "$dir/repo/.git" ]] && repo_state="git ready" || repo_state="repo folder"
+    project_has_api_key "$project" && secrets_state="api key ready" || secrets_state="api key missing"
+    [[ -f "$dir/.factory-container-settings.json" ]] && model_state="models configured" || model_state="models missing"
     running_state="$(project_status_label "$project")"
-    print_line "  $(paint "$BOLD" "$project")  [$running_state]  $(paint "$DIM" "$repo_state | $secrets_state | $model_state")"
+    profile_label="$(project_profile_label "$project")"
+    print_line "  $(paint "$BOLD" "$project")  [$running_state]  $(paint "$DIM" "profile: $profile_label | $repo_state | $secrets_state | $model_state")"
   done
 }
 
 select_project() {
   local prompt="$1"
+  local action_label="$2"
   mapfile -t projects < <(project_names)
 
   if [[ ${#projects[@]} -eq 0 ]]; then
@@ -335,33 +441,38 @@ select_project() {
 
   print_line >&2
   print_line "$prompt" >&2
+  paint "$DIM" "Enter a number, or 0 to cancel." >&2
+  print_line >&2
   local i=1
-  local project
+  local project profile_label
   for project in "${projects[@]}"; do
-    print_line "  $i) $project [$(project_status_label "$project")]" >&2
+    profile_label="$(project_profile_label "$project")"
+    print_line "  $i) $project [$(project_status_label "$project")] ($(paint "$DIM" "$profile_label"))" >&2
     ((i++))
   done
+  print_line "  0) Cancel" >&2
 
   local choice
-  read -r -p "Select a project [1-${#projects[@]}]: " choice >&2
-  if [[ ! "$choice" =~ ^[0-9]+$ ]] || (( choice < 1 || choice > ${#projects[@]} )); then
-    echo "Invalid selection" >&2
-    return 1
-  fi
-
-  printf '%s
-' "${projects[choice-1]}"
+  while true; do
+    read -r -p "$action_label [0-${#projects[@]}]: " choice >&2
+    if [[ "$choice" == "0" ]]; then
+      echo "Cancelled." >&2
+      return 1
+    fi
+    if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#projects[@]} )); then
+      printf '%s\n' "${projects[choice-1]}"
+      return 0
+    fi
+    echo "Invalid selection. Choose a number from 0 to ${#projects[@]}." >&2
+  done
 }
 
 setup_repository() {
   local repo_dir="$1"
   local repo_source
 
-  print_line
-  paint "$BOLD$BLUE" "Repository setup"
-  print_line
-  print_line "Leave blank to create a new local git repository."
-  read -r -p "Repository URL to clone (optional): " repo_source
+  print_section "Repository setup" "Optional. Enter a repository URL to clone, or leave this empty."
+  read -r -p "Repository URL to clone, or press Enter to create an empty repo: " repo_source
 
   if [[ -n "$repo_source" ]]; then
     rm -rf "$repo_dir"
@@ -388,10 +499,34 @@ ensure_project_started() {
   )
 }
 
+cleanup_project_dir() {
+  local dir="$1"
+  local removed=0
+
+  rm -rf "$dir" 2>/dev/null && removed=1
+  if (( removed == 1 )) || [[ ! -e "$dir" ]]; then
+    return 0
+  fi
+
+  if [[ -f "$dir/docker-compose.yml" ]]; then
+    (
+      cd "$dir"
+      docker compose run --rm --no-deps --user root -v "$dir":/cleanup droid \
+        sh -lc 'rm -rf /cleanup/* /cleanup/.[!.]* /cleanup/..?* 2>/dev/null || true'
+    ) >/dev/null 2>&1 || true
+  fi
+
+  rm -rf "$dir" 2>/dev/null && removed=1
+  if (( removed == 1 )) || [[ ! -e "$dir" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 create_project_flow() {
   print_header
-  paint "$BOLD$BLUE" "Create sandbox project"
-  print_line
+  print_section "Create sandbox project" ""
 
   local project_name
   project_name="$(prompt_default "Sandbox name" "my-project")"
@@ -400,21 +535,25 @@ create_project_flow() {
     return 1
   fi
 
+  local project_profile
+  project_profile="$(prompt_profile)"
+
   local project_dir
   project_dir="$(project_dir "$project_name")"
   if [[ -e "$project_dir" ]]; then
-    echo "Project sandbox already exists: $project_dir" >&2
+    echo "A sandbox with this name already exists: $project_dir" >&2
     return 1
   fi
 
   export SANDBOX_HOME
-  "$INIT_SCRIPT" "$project_name"
+  "$INIT_SCRIPT" "$project_name" "$project_profile" >/dev/null
 
   local repo_dir="$project_dir/repo"
   local env_file="$project_dir/.env"
   local secrets_file="$project_dir/.env.local"
   local settings_output="$project_dir/.factory-container-settings.json"
   local openai_api_key
+  print_section "codex-lb API key" ""
   openai_api_key="$(resolve_project_api_key "$env_file" "$secrets_file")" || {
     rm -rf "$project_dir"
     return 1
@@ -426,15 +565,21 @@ create_project_flow() {
   print_line
   paint "$GREEN" "Sandbox deployed"
   print_line
+  print_line "Name: $project_name"
+  print_line "Profile: $project_profile"
   print_line "Path: $project_dir"
-  print_line "Repo: $repo_dir"
+  print_line "Repository: $repo_dir"
+  print_line
 
-  if prompt_yes_no "Build and start the sandbox now?" "y"; then
+  if prompt_yes_no "Build the image and start the sandbox now?" "y"; then
     ensure_project_started "$project_name"
+    print_line
     print_line "Sandbox started."
-    if prompt_yes_no "Open Droid now?" "y"; then
+    if prompt_yes_no "Open the persistent Droid session now?" "y"; then
+      print_line
+      print_line "Droid runs inside tmux, so it stays available after you disconnect."
       SANDBOX_PROJECTS_DIR="$PROJECTS_DIR" "$ENTER_SCRIPT" "$project_name"
-    elif prompt_yes_no "Open a shell in the sandbox now?" "n"; then
+    elif prompt_yes_no "Open an interactive shell instead?" "n"; then
       SANDBOX_PROJECTS_DIR="$PROJECTS_DIR" "$ENTER_SCRIPT" --shell "$project_name"
     fi
   fi
@@ -448,7 +593,7 @@ open_project_shell() {
   running="$(project_running_services "$dir")"
 
   if [[ -z "$running" ]]; then
-    if prompt_yes_no "Project is not running. Build and start it now?" "y"; then
+    if prompt_yes_no "This sandbox is stopped. Build and start it before opening a shell?" "y"; then
       ensure_project_started "$project"
     else
       return 0
@@ -466,7 +611,7 @@ enter_project() {
   running="$(project_running_services "$dir")"
 
   if [[ -z "$running" ]]; then
-    if prompt_yes_no "Project is not running. Build and start it now?" "y"; then
+    if prompt_yes_no "This sandbox is stopped. Build and start it before opening or resuming Droid?" "y"; then
       ensure_project_started "$project"
     else
       return 0
@@ -482,14 +627,14 @@ delete_project() {
   dir="$(project_dir "$project")"
 
   print_header
-  paint "$BOLD$RED" "Delete sandbox project"
-  print_line
+  print_section "Delete sandbox project" ""
   print_line "Project: $project"
   print_line "Path: $dir"
-  print_line "This removes repo data, local secrets, Droid settings, and compose files."
+  print_line "This action permanently removes the sandbox and its local files."
+  print_line
 
   local confirmation
-  read -r -p "Type the project name to confirm deletion: " confirmation
+  read -r -p "Type the exact project name to confirm deletion: " confirmation
   if [[ "$confirmation" != "$project" ]]; then
     echo "Deletion cancelled"
     return 0
@@ -502,8 +647,13 @@ delete_project() {
     )
   fi
 
-  rm -rf "$dir"
-  echo "Deleted: $dir"
+  if cleanup_project_dir "$dir"; then
+    echo "Deleted: $dir"
+  else
+    echo "Project cleanup failed: $dir" >&2
+    echo "Some files are still owned by the container runtime. Rebuild or run cleanup from Docker before retrying." >&2
+    return 1
+  fi
 }
 
 show_menu() {
@@ -512,20 +662,21 @@ show_menu() {
   print_line
   paint "$BOLD$MAGENTA" "Actions"
   print_line
-  print_line "  1) Create project"
-  print_line "  2) Enter Droid"
-  print_line "  3) Open sandbox shell"
-  print_line "  4) Delete project"
-  print_line "  5) Refresh screen"
+  print_line "  1) Create a new sandbox project"
+  print_line "  2) Enter or resume Droid in a project"
+  print_line "  3) Open a shell in a project"
+  print_line "  4) Delete a project"
+  print_line "  5) Refresh this screen"
   print_line "  0) Exit"
   print_line
 }
 
 run_action_with_project() {
   local prompt="$1"
-  local action="$2"
+  local action_label="$2"
+  local action="$3"
   local project
-  project="$(select_project "$prompt")" || return 0
+  project="$(select_project "$prompt" "$action_label")" || return 0
   "$action" "$project" || true
 }
 
@@ -536,20 +687,20 @@ mkdir -p "$PROJECTS_DIR"
 
 while true; do
   show_menu
-  read -r -p "Choose an option [0-5]: " option || exit 0
+  read -r -p "Choose an action [0-5]: " option || exit 0
 
   case "$option" in
     1)
       create_project_flow
       ;;
     2)
-      run_action_with_project "Choose a project to enter:" enter_project
+      run_action_with_project "Choose the project where you want to open or resume Droid:" "Select project" enter_project
       ;;
     3)
-      run_action_with_project "Choose a project shell:" open_project_shell
+      run_action_with_project "Choose the project where you want a shell:" "Select project" open_project_shell
       ;;
     4)
-      run_action_with_project "Choose a project to delete:" delete_project
+      run_action_with_project "Choose the project you want to delete:" "Select project" delete_project
       ;;
     5)
       ;;

@@ -16,6 +16,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_SANDBOX_HOME="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PROJECTS_DIR="${SANDBOX_PROJECTS_DIR:-${SANDBOX_HOME:-$DEFAULT_SANDBOX_HOME}/projects}"
 PROJECT_DIR="$PROJECTS_DIR/$1"
+TMUX_SESSION_NAME="${DROID_TMUX_SESSION_NAME:-droid}"
+RUNTIME_PATH="/home/dev/.local/bin:/home/dev/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 if [[ ! -d "$PROJECT_DIR" ]]; then
   echo "Sandbox not found: $PROJECT_DIR" >&2
@@ -31,13 +33,30 @@ if [[ -z "$running_services" ]]; then
 fi
 
 docker compose exec -T droid sh -lc '
-  chown -R dev:dev /workspace /home/dev/.factory /home/dev/.cache 2>/dev/null || true
-  chown -R dev:dev /workspace/.git 2>/dev/null || true
-  HOME=/home/dev su dev -c "git config --global --add safe.directory /workspace"
+  git config --global --add safe.directory /workspace >/dev/null 2>&1 || true
 ' >/dev/null
 
 if [[ "$MODE" == "shell" ]]; then
-  exec docker compose exec droid env HOME=/home/dev PATH=/home/dev/.local/bin:/home/dev/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin su dev
+  exec docker compose exec droid env HOME=/home/dev PATH="$RUNTIME_PATH" bash
 fi
 
-exec docker compose exec droid sh -lc 'cd /workspace && exec env HOME=/home/dev PATH=/home/dev/.local/bin:/home/dev/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin su dev -c "cd /workspace && exec droid --settings /factory-config/settings.json"'
+docker compose exec -T droid sh -lc "
+  if ! command -v tmux >/dev/null 2>&1; then
+    echo 'tmux is not installed in this sandbox image.' >&2
+    exit 1
+  fi
+
+  if tmux has-session -t '$TMUX_SESSION_NAME' 2>/dev/null; then
+    if ! tmux list-panes -t '$TMUX_SESSION_NAME' -F '#{pane_dead}' 2>/dev/null | grep -qx '0'; then
+      tmux kill-session -t '$TMUX_SESSION_NAME' >/dev/null 2>&1 || true
+    fi
+  fi
+
+  if ! tmux has-session -t '$TMUX_SESSION_NAME' 2>/dev/null; then
+    cd /workspace
+    tmux new-session -d -s '$TMUX_SESSION_NAME' 'cd /workspace && exec env HOME=/home/dev PATH=$RUNTIME_PATH droid --settings /factory-config/settings.json'
+  fi
+"
+
+echo "Opening persistent Droid session '$TMUX_SESSION_NAME'. Detach with Ctrl+b then d." >&2
+exec docker compose exec droid env HOME=/home/dev PATH="$RUNTIME_PATH" tmux attach -t "$TMUX_SESSION_NAME"

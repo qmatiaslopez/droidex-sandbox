@@ -58,6 +58,7 @@ cd ..
 Choose `Create project` and provide:
 
 - sandbox name
+- sandbox profile: `base`, `python`, or `npm`
 - choose whether to use the default `OPENAI_API_KEY` from `sandboxes/.env`
 - if needed, enter another `codex-lb` API key to store only for that project
 - optional repository URL to clone
@@ -74,13 +75,23 @@ The generator creates:
 - `sandboxes/projects/<name>/.factory-container-settings.json`
 - `sandboxes/projects/<name>/repo/`
 
+New projects start from one of these runtime bases:
+
+- `base`: minimal Debian-based sandbox with Droid and the common CLI tooling only
+- `python`: Python runtime preinstalled in the image
+- `npm`: Node.js and npm preinstalled in the image
+
+Sandbox containers run as the non-root user `dev` and do not include `sudo`. Add system-level packages in the Dockerfile instead of installing them at runtime.
+
 ## 3. Start and verify
 
 From the menu you can:
 
 - build and start the sandbox
-- enter Droid
+- enter or resume Droid
 - open a shell
+
+When you choose Droid, the tool attaches to a persistent `tmux` session inside the sandbox container. Detach with `Ctrl+b` then `d` and return later through the same menu action.
 
 Direct connectivity check:
 
