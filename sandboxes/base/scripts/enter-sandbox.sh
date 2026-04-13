@@ -18,9 +18,15 @@ PROJECTS_DIR="${SANDBOX_PROJECTS_DIR:-${SANDBOX_HOME:-$DEFAULT_SANDBOX_HOME}/pro
 PROJECT_DIR="$PROJECTS_DIR/$1"
 TMUX_SESSION_NAME="${DROID_TMUX_SESSION_NAME:-droid}"
 RUNTIME_PATH="/home/dev/.local/bin:/home/dev/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+WRITE_AGENTS_SCRIPT="$SCRIPT_DIR/write-agents-md.sh"
 
 if [[ ! -d "$PROJECT_DIR" ]]; then
   echo "Sandbox not found: $PROJECT_DIR" >&2
+  exit 1
+fi
+
+if [[ ! -x "$WRITE_AGENTS_SCRIPT" ]]; then
+  echo "Missing required script: $WRITE_AGENTS_SCRIPT" >&2
   exit 1
 fi
 
@@ -35,6 +41,8 @@ fi
 docker compose exec -T droid sh -lc '
   git config --global --add safe.directory /workspace >/dev/null 2>&1 || true
 ' >/dev/null
+
+"$WRITE_AGENTS_SCRIPT" "$PROJECT_DIR"
 
 if [[ "$MODE" == "shell" ]]; then
   exec docker compose exec droid env HOME=/home/dev PATH="$RUNTIME_PATH" bash

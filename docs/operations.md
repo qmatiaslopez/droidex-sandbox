@@ -27,6 +27,7 @@ The menu is the intended operator interface for day-to-day use.
 - opens or resumes a persistent Droid session inside the `droid` container
 - uses `/factory-config/settings.json` generated for that project
 - runs Droid inside `tmux`, so it survives terminal disconnects
+- refreshes `/home/dev/.factory/AGENTS.md` with sandbox-specific context for Droid
 
 ### Open sandbox shell
 

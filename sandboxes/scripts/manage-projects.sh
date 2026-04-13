@@ -7,6 +7,7 @@ PROJECTS_DIR="${SANDBOX_PROJECTS_DIR:-$SANDBOX_HOME/projects}"
 INIT_SCRIPT="$SANDBOX_HOME/base/scripts/init-project.sh"
 RESOLVE_MODELS_SCRIPT="$SANDBOX_HOME/scripts/resolve-models.sh"
 ENTER_SCRIPT="$SANDBOX_HOME/base/scripts/enter-sandbox.sh"
+WRITE_AGENTS_SCRIPT="$SANDBOX_HOME/base/scripts/write-agents-md.sh"
 CODEX_COMPOSE_FILE="${CODEX_COMPOSE_FILE:-$STACK_ROOT/codex-lb/docker-compose.yaml}"
 SANDBOX_ENV_FILE="${SANDBOX_ENV_FILE:-$SANDBOX_HOME/.env}"
 
@@ -683,6 +684,7 @@ run_action_with_project() {
 require_script "$INIT_SCRIPT"
 require_script "$RESOLVE_MODELS_SCRIPT"
 require_script "$ENTER_SCRIPT"
+require_script "$WRITE_AGENTS_SCRIPT"
 mkdir -p "$PROJECTS_DIR"
 
 while true; do

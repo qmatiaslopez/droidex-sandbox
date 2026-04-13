@@ -55,6 +55,7 @@ When creating a project, the menu asks whether the sandbox should start from the
 - Generated sandbox projects live under `sandboxes/projects/<name>/`.
 - Per-project secrets and generated settings stay local and are ignored by Git.
 - Entering Droid attaches to a persistent `tmux` session inside the container, so it survives terminal disconnects.
+- The sandbox also writes `/home/dev/.factory/AGENTS.md` to give Droid persistent context about access, paths, and restrictions.
 
 ## Daily workflow
 

@@ -82,6 +82,7 @@ New projects start from one of these runtime bases:
 - `npm`: Node.js and npm preinstalled in the image
 
 Sandbox containers run as the non-root user `dev` and do not include `sudo`. Add system-level packages in the Dockerfile instead of installing them at runtime.
+When the sandbox starts Droid access, it writes `/home/dev/.factory/AGENTS.md` inside the container so Droid has stable instructions about the sandbox environment.
 
 ## 3. Start and verify
 
